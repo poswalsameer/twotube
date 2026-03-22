@@ -1,0 +1,50 @@
+/**
+ * All Socket.io event name constants.
+ * Shared across controllers and routes to avoid magic strings.
+ */
+
+// ── Client → Server ──────────────────────────────────────────────────────────
+export const CLIENT_EVENTS = {
+  CREATE_ROOM: "CREATE_ROOM",
+  JOIN_ROOM: "JOIN_ROOM",
+  LEAVE_ROOM: "LEAVE_ROOM",
+  DELETE_ROOM: "DELETE_ROOM",
+  KICK_USER: "KICK_USER",
+
+  SEND_MESSAGE: "SEND_MESSAGE",
+
+  PLAY_VIDEO: "PLAY_VIDEO",
+  PAUSE_VIDEO: "PAUSE_VIDEO",
+  SEEK_VIDEO: "SEEK_VIDEO",
+
+  ADD_TO_QUEUE: "ADD_TO_QUEUE",
+  NEXT_VIDEO: "NEXT_VIDEO",
+
+  WEBRTC_OFFER: "WEBRTC_OFFER",
+  WEBRTC_ANSWER: "WEBRTC_ANSWER",
+  WEBRTC_ICE: "WEBRTC_ICE",
+} as const
+
+// ── Server → Client ──────────────────────────────────────────────────────────
+export const SERVER_EVENTS = {
+  ROOM_CREATED: "ROOM_CREATED",
+  ROOM_JOINED: "ROOM_JOINED",
+  USER_JOINED: "USER_JOINED",
+  USER_LEFT: "USER_LEFT",
+  ROOM_DELETED: "ROOM_DELETED",
+  USER_KICKED: "USER_KICKED",
+
+  MESSAGE_RECEIVED: "MESSAGE_RECEIVED",
+
+  VIDEO_PLAY: "VIDEO_PLAY",
+  VIDEO_PAUSE: "VIDEO_PAUSE",
+  VIDEO_SEEK: "VIDEO_SEEK",
+
+  QUEUE_UPDATED: "QUEUE_UPDATED",
+
+  WEBRTC_OFFER: "WEBRTC_OFFER",
+  WEBRTC_ANSWER: "WEBRTC_ANSWER",
+  WEBRTC_ICE: "WEBRTC_ICE",
+
+  ERROR: "ERROR",
+} as const
