@@ -1,6 +1,6 @@
 import { Socket, Server } from "socket.io"
 import { videoSyncService } from "../services/video-sync.service"
-import { SERVER_EVENTS } from "../socket/events"
+import { SERVER_EVENTS } from "../constants/events"
 
 export const videoSyncController = {
   play(
@@ -10,10 +10,17 @@ export const videoSyncController = {
   ) {
     try {
       const { userId, roomId, currentTime, videoUrl } = payload
-      const data = videoSyncService.play(userId, roomId, currentTime, videoUrl)
-      io.to(roomId).emit(SERVER_EVENTS.VIDEO_PLAY, data)
+      const res = videoSyncService.play({ userId, roomId, currentTime, videoUrl })
+
+      if (!res.success || !res.data) {
+        socket.emit(SERVER_EVENTS.ERROR, { message: res.message })
+        return
+      }
+
+      io.to(roomId).emit(SERVER_EVENTS.VIDEO_PLAY, res.data)
       console.log(`[video-sync-controller] PLAY room ${roomId} at ${currentTime}s`)
     } catch (err: unknown) {
+      console.error("[video-sync-controller] play:", err)
       const message = err instanceof Error ? err.message : "Failed to process play."
       socket.emit(SERVER_EVENTS.ERROR, { message })
     }
@@ -26,10 +33,17 @@ export const videoSyncController = {
   ) {
     try {
       const { userId, roomId, currentTime } = payload
-      const data = videoSyncService.pause(userId, roomId, currentTime)
-      io.to(roomId).emit(SERVER_EVENTS.VIDEO_PAUSE, data)
+      const res = videoSyncService.pause({ userId, roomId, currentTime })
+
+      if (!res.success || !res.data) {
+        socket.emit(SERVER_EVENTS.ERROR, { message: res.message })
+        return
+      }
+
+      io.to(roomId).emit(SERVER_EVENTS.VIDEO_PAUSE, res.data)
       console.log(`[video-sync-controller] PAUSE room ${roomId} at ${currentTime}s`)
     } catch (err: unknown) {
+      console.error("[video-sync-controller] pause:", err)
       const message = err instanceof Error ? err.message : "Failed to process pause."
       socket.emit(SERVER_EVENTS.ERROR, { message })
     }
@@ -42,11 +56,18 @@ export const videoSyncController = {
   ) {
     try {
       const { userId, roomId, currentTime } = payload
-      const data = videoSyncService.seek(userId, roomId, currentTime)
+      const res = videoSyncService.seek({ userId, roomId, currentTime })
+
+      if (!res.success || !res.data) {
+        socket.emit(SERVER_EVENTS.ERROR, { message: res.message })
+        return
+      }
+
       // Relay to peers only — sender already applied the seek locally
-      socket.to(roomId).emit(SERVER_EVENTS.VIDEO_SEEK, data)
+      socket.to(roomId).emit(SERVER_EVENTS.VIDEO_SEEK, res.data)
       console.log(`[video-sync-controller] SEEK room ${roomId} to ${currentTime}s`)
     } catch (err: unknown) {
+      console.error("[video-sync-controller] seek:", err)
       const message = err instanceof Error ? err.message : "Failed to process seek."
       socket.emit(SERVER_EVENTS.ERROR, { message })
     }

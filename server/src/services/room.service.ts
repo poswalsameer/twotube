@@ -1,86 +1,277 @@
 import { nanoid } from "nanoid"
-import { roomManager } from "../room-manager/room-manager"
 import { roomRepo } from "../db/room.repo"
+import { roomManager } from "../room-manager/room-manager"
 import { generateRoomKey } from "../utils/generate-room-key"
 
 export const roomService = {
-  /**
-   * Creates a new room, registers it in memory and persists to Convex.
-   * Returns the new room state plus the human-readable key.
-   */
-  async createRoom(userId: string, socketId: string) {
-    const roomId = nanoid()
-    const roomKey = generateRoomKey()
 
-    const room = roomManager.createRoom(roomId, userId, socketId)
-    await roomRepo.create({ roomId, roomKey, hostId: userId })
+  // CREATES A NEW ROOM, STORES IN DB AND MEMORY
+  async createRoom({ userId, socketId }: { userId: string, socketId: string }) {
+    try {
+      const roomId = nanoid()
+      const roomKey = generateRoomKey()
 
-    return { room, roomKey }
-  },
+      const createRoomResponse = roomManager.createRoom({ roomId, hostId: userId, socketId })
 
-  /**
-   * Validates and joins a user to a room by roomKey.
-   * Returns the updated room state.
-   */
-  async joinRoom(userId: string, roomKey: string, socketId: string) {
-    const dbRoom = await roomRepo.findByKey(roomKey)
-    if (!dbRoom) throw new Error("Room not found. Check the key and try again.")
+      if (!createRoomResponse.success) {
+        return {
+          success: false,
+          message: "Failed to create room",
+          data: null
+        }
+      }
 
-    const { roomId } = dbRoom
-    const memRoom = roomManager.getRoom(roomId)
-    if (!memRoom) throw new Error("Room is no longer active.")
-    if (memRoom.users.includes(userId)) throw new Error("You are already in this room.")
-    if (roomManager.isFull(roomId)) throw new Error("Room is full.")
+      await roomRepo.create({ roomId, roomKey, hostId: userId })
 
-    const updatedRoom = roomManager.addGuest(roomId, userId, socketId)!
-    await roomRepo.updateGuest(roomId, userId)
-
-    return updatedRoom
-  },
-
-  /**
-   * Removes a user from a room in memory. Does NOT trigger cleanup —
-   * the controller decides whether to clean up based on who left.
-   */
-  removeUser(roomId: string, userId: string) {
-    return roomManager.removeUser(roomId, userId)
-  },
-
-  /**
-   * Removes the guest from the room (host-only action).
-   * Returns the kicked guest's id + socket id for targeted notifications.
-   */
-  kickGuest(roomId: string, hostId: string) {
-    if (!roomManager.isHost(roomId, hostId)) {
-      throw new Error("Only the host can kick users.")
+      return {
+        success: true,
+        message: "Room created successfully",
+        data: { room: createRoomResponse.data, roomKey }
+      }
+    } catch (error: any) {
+      console.error(`${userId}: Error while creating room: ${JSON.stringify(error, null, 2)}`)
+      return {
+        success: false,
+        message: error.message || `Error while creating room`,
+        data: null
+      }
     }
-
-    const room = roomManager.getRoom(roomId)
-    if (!room || !room.guestId) throw new Error("No guest to kick.")
-
-    const guestId = room.guestId
-    const guestSocketId = room.sockets[guestId]
-
-    roomManager.removeUser(roomId, guestId)
-
-    return { guestId, guestSocketId }
   },
 
+  // VALIDATES AND JOINS A USER TO A ROOM USING ROOMKEY
+  async joinRoom({
+    userId,
+    roomKey,
+    socketId
+  }: {
+    userId: string,
+    roomKey: string,
+    socketId: string
+  }) {
+    try {
+      const dbRoom = await roomRepo.findByKey(roomKey)
+
+      if (!dbRoom) {
+        return {
+          success: false,
+          message: "Room not found. Check the key and try again",
+          data: null
+        }
+      }
+
+      const { roomId } = dbRoom
+      const getRoomResponse = roomManager.getRoom(roomId)
+
+      if (!getRoomResponse.success || !getRoomResponse.data) {
+        return {
+          success: false,
+          message: "Room is no longer active",
+          data: null
+        }
+      }
+
+      if (getRoomResponse.data.users.includes(userId)) {
+        return {
+          success: false,
+          message: "You are already in this room",
+          data: null
+        }
+      }
+
+      const isRoomFullResponse = roomManager.isFull(roomId)
+      if (isRoomFullResponse.success) {
+        return {
+          success: false,
+          message: "Room is full",
+          data: null
+        }
+      }
+
+      const addGuestResponse = roomManager.addGuest({ roomId, guestId: userId, socketId })
+
+      if (!addGuestResponse.success) {
+        return {
+          success: false,
+          message: addGuestResponse.message,
+          data: null
+        }
+      }
+
+      await roomRepo.updateGuest(roomId, userId)
+
+      return {
+        success: true,
+        message: "Joined room successfully",
+        data: addGuestResponse.data
+      }
+    } catch (error: any) {
+      console.error(`${userId}: Error while joining room: ${JSON.stringify(error, null, 2)}`)
+      return {
+        success: false,
+        message: error.message || "Error while joining room",
+        data: null
+      }
+    }
+  },
+
+  // REMOVES A USER FROM A ROOM IN MEMORY
+  removeUser(roomId: string, userId: string) {
+    try {
+      const removeUserResponse = roomManager.removeUser({ roomId, userId })
+
+      if (!removeUserResponse.success) {
+        return {
+          success: false,
+          message: removeUserResponse.message,
+          data: null
+        }
+      }
+
+      return {
+        success: true,
+        message: "User removed successfully",
+        data: removeUserResponse.data
+      }
+    } catch (error: any) {
+      console.error(`${userId}: Error while removing user: ${JSON.stringify(error, null, 2)}`)
+      return {
+        success: false,
+        message: error.message || "Error while removing user",
+        data: null
+      }
+    }
+  },
+
+  // KICKS A GUEST FROM THE ROOM (HOST-ONLY ACTION)
+  kickGuest(roomId: string, hostId: string) {
+    try {
+      const isHostResponse = roomManager.isHost({ roomId, userId: hostId })
+      if (!isHostResponse.success) {
+        return {
+          success: false,
+          message: "Only the host can kick users",
+          data: null
+        }
+      }
+
+      const getRoomResponse = roomManager.getRoom(roomId)
+      if (!getRoomResponse.success || !getRoomResponse.data || !getRoomResponse.data.guestId) {
+        return {
+          success: false,
+          message: "No guest to kick",
+          data: null
+        }
+      }
+
+      const guestId = getRoomResponse.data.guestId
+      const guestSocketId = getRoomResponse.data.sockets[guestId]
+
+      const removeUserResponse = roomManager.removeUser({ roomId, userId: guestId })
+
+      if (!removeUserResponse.success) {
+        return {
+          success: false,
+          message: "Failed to kick guest",
+          data: null
+        }
+      }
+
+      return {
+        success: true,
+        message: "Guest kicked successfully",
+        data: { guestId, guestSocketId }
+      }
+    } catch (error: any) {
+      console.error(`${hostId}: Error while kicking guest: ${JSON.stringify(error, null, 2)}`)
+      return {
+        success: false,
+        message: error.message || "Error while kicking guest",
+        data: null
+      }
+    }
+  },
+
+  // CHECKS IF THE USER IS HOST OR NOT
   isHost(roomId: string, userId: string) {
-    return roomManager.isHost(roomId, userId)
+    try {
+      const isHostResponse = roomManager.isHost({ roomId, userId })
+      return {
+        success: isHostResponse.success,
+        message: isHostResponse.message,
+        data: isHostResponse.success
+      }
+    } catch (error: any) {
+      console.error(`${userId}: Error checking host status: ${JSON.stringify(error, null, 2)}`)
+      return {
+        success: false,
+        message: error.message || "Error checking host status",
+        data: false
+      }
+    }
   },
 
+  // GETS A ROOM BY ROOMID
   getRoom(roomId: string) {
-    return roomManager.getRoom(roomId)
+    try {
+      const getRoomResponse = roomManager.getRoom(roomId)
+      return {
+        success: getRoomResponse.success,
+        message: getRoomResponse.message,
+        data: getRoomResponse.data
+      }
+    } catch (error: any) {
+      console.error(`Error getting room ${roomId}: ${JSON.stringify(error, null, 2)}`)
+      return {
+        success: false,
+        message: error.message || "Error getting room",
+        data: null
+      }
+    }
   },
 
+  // GETS A ROOM BY SOCKETID
   getRoomBySocketId(socketId: string) {
-    return roomManager.getRoomBySocketId(socketId)
+    try {
+      const getRoomBySocketIdResponse = roomManager.getRoomBySocketId(socketId)
+      return {
+        success: getRoomBySocketIdResponse.success,
+        message: getRoomBySocketIdResponse.message,
+        data: getRoomBySocketIdResponse.data
+      }
+    } catch (error: any) {
+      console.error(`Error getting room by socket ${socketId}: ${JSON.stringify(error, null, 2)}`)
+      return {
+        success: false,
+        message: error.message || "Error getting room by socket",
+        data: null
+      }
+    }
   },
 
+  // GETS A USERID BY SOCKETID
   getUserIdBySocketId(socketId: string) {
-    const room = roomManager.getRoomBySocketId(socketId)
-    if (!room) return null
-    return Object.entries(room.sockets).find(([, sid]) => sid === socketId)?.[0] ?? null
+    try {
+      const getRoomBySocketIdResponse = roomManager.getRoomBySocketId(socketId)
+      if (!getRoomBySocketIdResponse.success || !getRoomBySocketIdResponse.data) {
+        return {
+          success: false,
+          message: "User not found for this socket",
+          data: null
+        }
+      }
+      const userId = Object.entries(getRoomBySocketIdResponse.data.sockets).find(([, sid]) => sid === socketId)?.[0] ?? null
+      return {
+        success: !!userId,
+        message: userId ? "User found" : "User not found",
+        data: userId
+      }
+    } catch (error: any) {
+      console.error(`Error getting user by socket ${socketId}: ${JSON.stringify(error, null, 2)}`)
+      return {
+        success: false,
+        message: error.message || "Error getting user by socket",
+        data: null
+      }
+    }
   },
 }

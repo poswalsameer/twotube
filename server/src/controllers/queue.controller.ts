@@ -1,6 +1,6 @@
 import { Socket, Server } from "socket.io"
 import { queueService } from "../services/queue.service"
-import { SERVER_EVENTS } from "../socket/events"
+import { SERVER_EVENTS } from "../constants/events"
 
 export const queueController = {
   async addToQueue(
@@ -16,11 +16,18 @@ export const queueController = {
         return
       }
 
-      const queue = await queueService.addToQueue(userId, roomId, videoUrl)
-      io.to(roomId).emit(SERVER_EVENTS.QUEUE_UPDATED, { queue })
+      const res = await queueService.addToQueue({ userId, roomId, videoUrl })
+
+      if (!res.success || !res.data) {
+        socket.emit(SERVER_EVENTS.ERROR, { message: res.message })
+        return
+      }
+
+      io.to(roomId).emit(SERVER_EVENTS.QUEUE_UPDATED, { queue: res.data })
 
       console.log(`[queue-controller] ${userId} added to queue in room ${roomId}`)
     } catch (err: unknown) {
+      console.error("[queue-controller] addToQueue:", err)
       const message = err instanceof Error ? err.message : "Failed to add to queue."
       socket.emit(SERVER_EVENTS.ERROR, { message })
     }
@@ -39,7 +46,14 @@ export const queueController = {
         return
       }
 
-      const { nextVideo, updatedQueue } = await queueService.nextVideo(userId, roomId)
+      const res = await queueService.nextVideo({ userId, roomId })
+
+      if (!res.success || !res.data) {
+        socket.emit(SERVER_EVENTS.ERROR, { message: res.message })
+        return
+      }
+
+      const { nextVideo, updatedQueue } = res.data
 
       io.to(roomId).emit(SERVER_EVENTS.QUEUE_UPDATED, { queue: updatedQueue })
       io.to(roomId).emit(SERVER_EVENTS.VIDEO_PLAY, {
@@ -50,6 +64,7 @@ export const queueController = {
 
       console.log(`[queue-controller] Next video in room ${roomId}: ${nextVideo.videoUrl}`)
     } catch (err: unknown) {
+      console.error("[queue-controller] nextVideo:", err)
       const message = err instanceof Error ? err.message : "Failed to advance queue."
       socket.emit(SERVER_EVENTS.ERROR, { message })
     }

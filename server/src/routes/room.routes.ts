@@ -1,11 +1,14 @@
 import { Socket, Server } from "socket.io"
-import { CLIENT_EVENTS } from "../events"
-import { roomController } from "../../controllers/room.controller"
+import { CLIENT_EVENTS } from "../constants/events"
+import { roomController } from "../controllers/room.controller"
 
-/**
- * Registers all room lifecycle socket events for a connected socket.
- */
-export function registerRoomRoutes(socket: Socket, io: Server) {
+export function registerRoomRoutes({
+  socket,
+  io
+}: {
+  socket: Socket,
+  io: Server
+}) {
   socket.on(CLIENT_EVENTS.CREATE_ROOM, (payload) =>
     roomController.createRoom(payload, socket, io)
   )

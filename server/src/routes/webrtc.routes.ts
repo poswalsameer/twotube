@@ -1,11 +1,14 @@
 import { Socket, Server } from "socket.io"
-import { CLIENT_EVENTS } from "../events"
-import { webrtcController } from "../../controllers/webrtc.controller"
+import { CLIENT_EVENTS } from "../constants/events"
+import { webrtcController } from "../controllers/webrtc.controller"
 
-/**
- * Registers WebRTC signalling socket events for a connected socket.
- */
-export function registerWebrtcRoutes(socket: Socket, io: Server) {
+export function registerWebrtcRoutes({
+  socket,
+  io
+}: {
+  socket: Socket,
+  io: Server
+}) {
   socket.on(CLIENT_EVENTS.WEBRTC_OFFER, (payload) =>
     webrtcController.offer(payload, socket, io)
   )

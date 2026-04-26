@@ -1,9 +1,4 @@
-/**
- * All Socket.io event name constants.
- * Shared across controllers and routes to avoid magic strings.
- */
-
-// ── Client → Server ──────────────────────────────────────────────────────────
+// CLIENT → SERVER
 export const CLIENT_EVENTS = {
   CREATE_ROOM: "CREATE_ROOM",
   JOIN_ROOM: "JOIN_ROOM",
@@ -25,7 +20,7 @@ export const CLIENT_EVENTS = {
   WEBRTC_ICE: "WEBRTC_ICE",
 } as const
 
-// ── Server → Client ──────────────────────────────────────────────────────────
+// SERVER → CLIENT
 export const SERVER_EVENTS = {
   ROOM_CREATED: "ROOM_CREATED",
   ROOM_JOINED: "ROOM_JOINED",

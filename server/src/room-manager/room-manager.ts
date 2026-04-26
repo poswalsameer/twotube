@@ -1,25 +1,36 @@
-/**
- * In-memory room manager — single source of truth for active rooms.
- * Convex is the persistence layer; this is ephemeral runtime state.
- */
-
-export interface RoomState {
-  roomId: string
-  hostId: string
-  guestId: string | null
-  users: string[]                 // ordered: [hostId, guestId?]
-  sockets: Record<string, string> // { userId -> socketId }
-  currentVideoUrl: string | null
-  isPlaying: boolean
-  currentTime: number
-}
+import type {
+  RoomState,
+  AddGuestRequest,
+  AddGuestResponse,
+  CreateRoomRequest,
+  CreateRoomResponse,
+  DeleteRoomRequest,
+  DeleteRoomResponse,
+  GetRoomBySocketIdRequest,
+  GetRoomBySocketIdResponse,
+  GetRoomByUserIdRequest,
+  GetRoomByUserIdResponse,
+  GetRoomRequest,
+  GetRoomResponse,
+  RemoveUserRequest,
+  RemoveUserResponse,
+  SetCurrentTimeRequest,
+  SetCurrentTimeResponse,
+  SetPlayingRequest,
+  SetPlayingResponse,
+  SetVideoRequest,
+  SetVideoResponse
+} from "../types"
 
 class RoomManager {
   private rooms: Map<string, RoomState> = new Map();
 
-  // ── Create / Delete ─────────────────────────────────────────────────────────
-
-  createRoom(roomId: string, hostId: string, socketId: string): RoomState {
+  // CREATE ROOM 
+  createRoom({
+    roomId,
+    hostId,
+    socketId
+  }: CreateRoomRequest): CreateRoomResponse {
     const room: RoomState = {
       roomId,
       hostId,
@@ -30,91 +41,270 @@ class RoomManager {
       isPlaying: false,
       currentTime: 0,
     }
+
     this.rooms.set(roomId, room)
-    return room
+
+    return {
+      success: true,
+      message: "Room created successfully",
+      data: room
+    }
   }
 
-  deleteRoom(roomId: string): void {
+  // DELETE ROOM
+  deleteRoom(roomId: DeleteRoomRequest): DeleteRoomResponse {
     this.rooms.delete(roomId)
-  }
 
-  // ── Lookups ─────────────────────────────────────────────────────────────────
-
-  getRoom(roomId: string): RoomState | undefined {
-    return this.rooms.get(roomId)
-  }
-
-  getRoomByUserId(userId: string): RoomState | undefined {
-    for (const room of this.rooms.values()) {
-      if (room.users.includes(userId)) return room
+    return {
+      success: true,
+      message: "Room deleted successfully",
+      data: null
     }
-    return undefined
   }
 
-  getRoomBySocketId(socketId: string): RoomState | undefined {
-    for (const room of this.rooms.values()) {
-      if (Object.values(room.sockets).includes(socketId)) return room
+  // GET ROOM
+  getRoom(roomId: GetRoomRequest): GetRoomResponse {
+    const currentRoom = this.rooms.get(roomId)
+
+    if (!currentRoom) {
+      return {
+        success: false,
+        message: "Room not found",
+        data: null
+      }
     }
-    return undefined
+
+    return {
+      success: true,
+      message: "Room found successfully",
+      data: currentRoom
+    }
   }
 
-  // ── User management ─────────────────────────────────────────────────────────
+  // GET ROOM BY USER ID
+  getRoomByUserId(userId: GetRoomByUserIdRequest): GetRoomByUserIdResponse {
+    for (const room of this.rooms.values()) {
+      if (room.users.includes(userId)) {
+        return {
+          success: true,
+          message: "Room found successfully",
+          data: room
+        }
+      }
+    }
+    return {
+      success: false,
+      message: "Room not found",
+      data: null
+    }
+  }
 
-  addGuest(roomId: string, guestId: string, socketId: string): RoomState | null {
+  // GET ROOM BY SOCKET ID
+  getRoomBySocketId(socketId: GetRoomBySocketIdRequest): GetRoomBySocketIdResponse {
+    for (const room of this.rooms.values()) {
+      if (Object.values(room.sockets).includes(socketId)) {
+        return {
+          success: true,
+          message: `Room found with ${socketId}`,
+          data: room
+        }
+      }
+    }
+    return {
+      success: false,
+      message: "Room not found",
+      data: null
+    }
+  }
+
+  // ADD GUEST
+  addGuest({
+    roomId,
+    guestId,
+    socketId
+  }: AddGuestRequest): AddGuestResponse {
     const room = this.rooms.get(roomId)
-    if (!room) return null
+
+    if (!room) return {
+      success: false,
+      message: "Room not found",
+      data: null
+    }
+
     room.guestId = guestId
     room.users.push(guestId)
     room.sockets[guestId] = socketId
-    return room
+
+    return {
+      success: true,
+      message: "Guest added successfully",
+      data: room
+    }
   }
 
-  removeUser(roomId: string, userId: string): RoomState | null {
+  // REMOVE USER
+  removeUser({
+    roomId,
+    userId
+  }: RemoveUserRequest): RemoveUserResponse {
     const room = this.rooms.get(roomId)
-    if (!room) return null
+
+    if (!room) return {
+      success: false,
+      message: "Room not found",
+      data: null
+    }
+
     room.users = room.users.filter((u) => u !== userId)
     delete room.sockets[userId]
     if (room.guestId === userId) room.guestId = null
-    return room
+
+    return {
+      success: true,
+      message: "User removed successfully",
+      data: room
+    }
   }
 
-  // ── Video state ─────────────────────────────────────────────────────────────
-
-  setVideo(roomId: string, url: string): void {
+  // SET VIDEO
+  setVideo({
+    roomId,
+    url
+  }: SetVideoRequest): SetVideoResponse {
     const room = this.rooms.get(roomId)
-    if (room) room.currentVideoUrl = url
+
+    if (!room) return {
+      success: false,
+      message: "Room not found",
+      data: null
+    }
+
+    room.currentVideoUrl = url
+
+    return {
+      success: true,
+      message: "Video set successfully",
+      data: room
+    }
   }
 
-  setPlaying(roomId: string, isPlaying: boolean, currentTime: number): void {
+  // SET PLAYING
+  setPlaying({
+    roomId,
+    isPlaying,
+    currentTime
+  }: SetPlayingRequest): SetPlayingResponse {
     const room = this.rooms.get(roomId)
-    if (!room) return
+
+    if (!room) return {
+      success: false,
+      message: "Room not found",
+      data: null
+    }
+
     room.isPlaying = isPlaying
     room.currentTime = currentTime
+
+    return {
+      success: true,
+      message: "Playing state updated successfully",
+      data: room
+    }
   }
 
-  setCurrentTime(roomId: string, currentTime: number): void {
+  // SET CURRENT TIME
+  setCurrentTime({
+    roomId,
+    currentTime
+  }: SetCurrentTimeRequest): SetCurrentTimeResponse {
     const room = this.rooms.get(roomId)
-    if (room) room.currentTime = currentTime
+
+    if (!room) {
+      return {
+        success: false,
+        message: "Room not found",
+      }
+    }
+
+    room.currentTime = currentTime
+
+    return {
+      success: true,
+      message: "Current time updated successfully",
+    }
   }
 
-  // ── Helpers ─────────────────────────────────────────────────────────────────
-
-  isFull(roomId: string): boolean {
+  // TO CHECK IF ROOM IS FULL  OR NOT
+  isFull(roomId: string) {
     const room = this.rooms.get(roomId)
-    return room ? room.users.length >= 2 : false
+
+    if (!room) {
+      return {
+        success: false,
+        message: "Room not found",
+      }
+    }
+
+    const isFull = room?.users.length >= 2
+
+    return {
+      success: isFull,
+      message: isFull ? "Room is full" : "Room is not full",
+    }
+
   }
 
-  isHost(roomId: string, userId: string): boolean {
-    return this.rooms.get(roomId)?.hostId === userId
-  }
-
-  getPeerSocketId(roomId: string, myUserId: string): string | undefined {
+  //  TO CHECK IF THE CURRENT USER IS HOST OR NOT
+  isHost({
+    roomId,
+    userId
+  }: {
+    roomId: string,
+    userId: string
+  }) {
     const room = this.rooms.get(roomId)
-    if (!room) return undefined
+
+    if (!room) {
+      return {
+        success: false,
+        message: "Room not found",
+      }
+    }
+
+    const isHost = room?.hostId === userId
+
+    return {
+      success: isHost,
+      message: isHost ? "User is host" : "User is not host",
+    }
+  }
+
+  // TO GET PEER SOCKET ID
+  getPeerSocketId({
+    roomId,
+    myUserId
+  }: {
+    roomId: string,
+    myUserId: string
+  }) {
+    const room = this.rooms.get(roomId)
+
+    if (!room) {
+      return {
+        success: false,
+        message: "Room not found",
+      }
+    }
+
     const peerId = room.users.find((u) => u !== myUserId)
-    return peerId ? room.sockets[peerId] : undefined
+    const peerSocketId = peerId ? room.sockets[peerId] : undefined
+
+    return {
+      success: true,
+      message: "Peer socket ID found successfully",
+      data: peerSocketId
+    }
   }
 }
 
-// Singleton
 export const roomManager = new RoomManager()

@@ -1,6 +1,6 @@
 import { Socket, Server } from "socket.io"
 import { roomManager } from "../room-manager/room-manager"
-import { SERVER_EVENTS } from "../socket/events"
+import { SERVER_EVENTS } from "../constants/events"
 
 interface WebRTCPayload {
   userId: string
@@ -16,12 +16,14 @@ interface WebRTCPayload {
  * The server never inspects WebRTC payload content — it's a pure relay.
  */
 function forwardToPeer(eventName: string, payload: WebRTCPayload, socket: Socket, io: Server) {
-  const peerSocketId = roomManager.getPeerSocketId(payload.roomId, payload.userId)
-  if (!peerSocketId) {
+  const res = roomManager.getPeerSocketId({ roomId: payload.roomId, myUserId: payload.userId })
+  
+  if (!res.success || !res.data) {
     socket.emit(SERVER_EVENTS.ERROR, { message: "Peer is not connected." })
     return
   }
-  io.to(peerSocketId).emit(eventName, payload)
+  
+  io.to(res.data).emit(eventName, payload)
 }
 
 export const webrtcController = {

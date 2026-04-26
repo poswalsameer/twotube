@@ -1,13 +1,13 @@
 import "dotenv/config"
+import cors from "cors"
 import express from "express"
 import { createServer } from "http"
-import cors from "cors"
-import { initSocketServer } from "./socket/socket-server"
+import { initSocketServer } from "./socket/index"
 
 const app = express()
 const httpServer = createServer(app)
 
-// ── Middleware ────────────────────────────────────────────────────────────────
+// MIDDLEWARES
 app.use(
   cors({
     origin: process.env.CLIENT_ORIGIN ?? "http://localhost:3000",
@@ -16,19 +16,18 @@ app.use(
 )
 app.use(express.json())
 
-// ── Health check ──────────────────────────────────────────────────────────────
+// HEALTH CHECK ENDPOINT
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() })
 })
 
-// ── Socket.io ─────────────────────────────────────────────────────────────────
+// SOCKET.IO
 initSocketServer(httpServer)
 
-// ── Start ─────────────────────────────────────────────────────────────────────
 const PORT = Number(process.env.PORT ?? 3001)
 
 httpServer.listen(PORT, () => {
-  console.log(`🚀  TwoTube server listening on http://localhost:${PORT}`)
+  console.log(`TwoTube server listening on http://localhost:${PORT}`)
 })
 
 export default app

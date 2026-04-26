@@ -1,7 +1,7 @@
 import { Socket, Server } from "socket.io"
+import { SERVER_EVENTS } from "../constants/events"
 import { roomService } from "../services/room.service"
-import { cleanupRoom } from "../services/cleanup.service"
-import { SERVER_EVENTS } from "../socket/events"
+import { cleanupService } from "../services/cleanup.service"
 
 export const roomController = {
   async createRoom(payload: { userId: string }, socket: Socket, _io: Server) {
@@ -12,7 +12,14 @@ export const roomController = {
         return
       }
 
-      const { room, roomKey } = await roomService.createRoom(userId, socket.id)
+      const res = await roomService.createRoom({ userId, socketId: socket.id })
+
+      if (!res.success || !res.data) {
+        socket.emit(SERVER_EVENTS.ERROR, { message: res.message })
+        return
+      }
+
+      const { room, roomKey } = res.data
       await socket.join(room.roomId)
 
       socket.emit(SERVER_EVENTS.ROOM_CREATED, {
@@ -36,7 +43,14 @@ export const roomController = {
         return
       }
 
-      const room = await roomService.joinRoom(userId, roomKey, socket.id)
+      const res = await roomService.joinRoom({ userId, roomKey, socketId: socket.id })
+
+      if (!res.success || !res.data) {
+        socket.emit(SERVER_EVENTS.ERROR, { message: res.message })
+        return
+      }
+
+      const room = res.data
       await socket.join(room.roomId)
 
       // Notify existing host
@@ -56,6 +70,7 @@ export const roomController = {
 
       console.log(`[room-controller] User ${userId} joined room ${room.roomId}`)
     } catch (err: unknown) {
+      console.error("[room-controller] joinRoom:", err)
       const message = err instanceof Error ? err.message : "Failed to join room."
       socket.emit(SERVER_EVENTS.ERROR, { message })
     }
@@ -69,22 +84,24 @@ export const roomController = {
         return
       }
 
-      const room = roomService.getRoom(roomId)
-      if (!room) return
+      const roomRes = roomService.getRoom(roomId)
+      if (!roomRes.success || !roomRes.data) return
 
-      const wasHost = roomService.isHost(roomId, userId)
+      const wasHostRes = roomService.isHost(roomId, userId)
+      const wasHost = wasHostRes.data
+
       roomService.removeUser(roomId, userId)
       socket.leave(roomId)
 
       if (wasHost) {
-        await cleanupRoom(roomId, io)
+        await cleanupService.cleanupRoom({ roomId, io })
         console.log(`[room-controller] Host ${userId} left — room ${roomId} deleted.`)
         return
       }
 
-      const updatedRoom = roomService.getRoom(roomId)
-      if (!updatedRoom || updatedRoom.users.length === 0) {
-        await cleanupRoom(roomId, io)
+      const updatedRoomRes = roomService.getRoom(roomId)
+      if (!updatedRoomRes.success || !updatedRoomRes.data || updatedRoomRes.data.users.length === 0) {
+        await cleanupService.cleanupRoom({ roomId, io })
         console.log(`[room-controller] Room ${roomId} empty — deleted.`)
         return
       }
@@ -105,12 +122,13 @@ export const roomController = {
         return
       }
 
-      if (!roomService.isHost(roomId, userId)) {
+      const hostRes = roomService.isHost(roomId, userId)
+      if (!hostRes.success || !hostRes.data) {
         socket.emit(SERVER_EVENTS.ERROR, { message: "Only the host can delete the room." })
         return
       }
 
-      await cleanupRoom(roomId, io)
+      await cleanupService.cleanupRoom({ roomId, io })
       console.log(`[room-controller] Room ${roomId} deleted by host ${userId}.`)
     } catch (err) {
       console.error("[room-controller] deleteRoom:", err)
@@ -126,7 +144,14 @@ export const roomController = {
         return
       }
 
-      const { guestId, guestSocketId } = roomService.kickGuest(roomId, hostId)
+      const res = roomService.kickGuest(roomId, hostId)
+
+      if (!res.success || !res.data) {
+        socket.emit(SERVER_EVENTS.ERROR, { message: res.message })
+        return
+      }
+
+      const { guestId, guestSocketId } = res.data
 
       if (guestSocketId) {
         const guestSocket = io.sockets.sockets.get(guestSocketId)
@@ -134,9 +159,10 @@ export const roomController = {
         io.to(guestSocketId).emit(SERVER_EVENTS.USER_KICKED, { roomId })
       }
 
-      socket.emit(SERVER_EVENTS.USER_LEFT, { userId: guestId, roomId })
+      socket.to(roomId).emit(SERVER_EVENTS.USER_LEFT, { userId: guestId, roomId })
       console.log(`[room-controller] Host ${hostId} kicked ${guestId} from room ${roomId}.`)
     } catch (err: unknown) {
+      console.error("[room-controller] kickUser:", err)
       const message = err instanceof Error ? err.message : "Failed to kick user."
       socket.emit(SERVER_EVENTS.ERROR, { message })
     }
